@@ -15,4 +15,4 @@ GetOptions (
 
 my($cve) = new Cve( debug => $debug );
 
-$cve->update_cve_db()
+$cve->dump_cve_db()

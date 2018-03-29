@@ -56,7 +56,7 @@ use open ':encoding(utf8)';
 use Sys::Hostname;
 binmode(STDOUT, ":utf8");
 
-our $DEBUG = 0;
+our $DEBUG = 1;
 our $VERSION = 'v0.1.0';
 our @ISA = qw(Object);
 
@@ -76,7 +76,29 @@ sub new {
         while ( my($key,$val) = each(%hash) ) {
                 $self->set($key,$val);
         }
-	$self->set("debug",0);
+	$self->started(time);
+
+	{
+		my($do_deb) = 0;
+		my($do_rpm) = 0;
+		my($osrel) = "/etc/os-release";
+		if ( -r $osrel ) {
+			my(@osrel) = $self->readfile($osrel);
+			foreach ( @osrel ) {
+				if ( m/ubuntu|debian/i ) {
+					$self->isdeb(1);
+				}
+				elsif ( m/rhel|centos|redhat|suse/ ) {
+					$self->isrpm(1);
+				}
+			}
+		}
+	}
+
+	my($cve_pkg_db) = $self->home() . "/.cve-pkg." . $self->hostname . ".db";
+	$self->pkgdb($cve_pkg_db);
+	my($cve_changelog_db) = $self->home() . "/.cve-cve." . $self->hostname . ".db";
+	$self->cvedb($cve_changelog_db);
 
 	print Dumper(\$self) if ( $DEBUG );
         return($self);
@@ -113,6 +135,11 @@ sub _accessor {
 sub rpmbin { return ( shift->_accessor("rpmbin",shift) ); }
 sub home { return ( shift->_accessor("home",shift) ); }
 sub myhostname { return ( shift->_accessor("myhostname",shift) ); }
+sub isrpm { return ( shift->_accessor("isrpm",shift) ); }
+sub isdeb { return ( shift->_accessor("isdeb",shift) ); }
+sub started { return ( shift->_accessor("started",shift) ); }
+sub pkgdb { return ( shift->_accessor("pkgdb",shift) ); }
+sub cvedb { return ( shift->_accessor("cvedb",shift) ); }
 
 sub trim {
 	my($self) = shift;
@@ -202,73 +229,52 @@ sub _get_deb_pkg() {
 	return( $self->popen($cmd) );
 }
 
-sub deb_pkg_db() {
+sub _get_rpm_pkg() {
 	my($self) = shift;
-	my($cve_deb_db) = $self->home() . "/.cve-deb." . $self->hostname . ".db";
-	$self->debug(5,"cve_deb_db: $cve_deb_db");
-
-	my(%pkgcache) = $self->readhashcache($cve_deb_db);
-
-	my($secs) = $pkgcache{secs} || 0;
-	my($age) = time - $secs;
-	if ( $age > 1600 ) {
-		$self->debug(1,"Refreshing cache, age: $age");
-		my(@pkg) = $self->_get_deb_pkg;
-		$pkgcache{secs}=time;
-		$pkgcache{data}=\@pkg;
-		lock_store \%pkgcache, $cve_deb_db;
-	}
-	else {
-		$self->debug(1, "Using cache...age=$age");
-	}
-
-	my($ap) = $pkgcache{data};
-	return($ap);
+	return( $self->rpm("-qa") ) ;
 }
 
-
-	
-sub rpm_pkg_db() {
+sub pkg_db() {
 	my($self) = shift;
-	my($cve_rpm_db) = $self->home() . "/.cve-rpm." . $self->hostname . ".db";
-	$self->debug(5,"cve_rpm_db: $cve_rpm_db");
+	my($cve_pkg_db) = $self->pkgdb();
+	$self->debug(5,"cve_pkg_db: $cve_pkg_db");
 
 	my(@pkg) = ();
 
-	my(%rpmcache);
-	if ( -r $cve_rpm_db ) {
-		my($hashref);
-		$hashref = lock_retrieve($cve_rpm_db);
-		%rpmcache = %$hashref;
-	}
-	
-	my($secs) = $rpmcache{secs} || 0;
+	my(%pkgcache) = $self->readhashcache($cve_pkg_db);
+
+	my($secs) = $pkgcache{TIME} || 0;
 	my($age) = time - $secs;
 	if ( $age > 1600 ) {
 		$self->debug(1,"Refreshing cache, age: $age");
-		my(@pkg) = $self->rpm("-qa");
-		$rpmcache{secs}=time;
-		$rpmcache{data}=\@pkg;
-		lock_store \%rpmcache, $cve_rpm_db;
+		my(@pkg) = ();
+		if ( $self->isrpm() ) {
+			@pkg = $self->_get_rpm_pkg();
+		}
+		elsif ( $self->isdeb() ) {
+			@pkg = $self->_get_deb_pkg();
+		}
+		$pkgcache{TIME}=time;
+		$pkgcache{DATA}=\@pkg;
+		lock_store \%pkgcache, $cve_pkg_db;
 	}
 	else {
 		$self->debug(1,"Using cache...age=$age");
 	}
 
-	my($ap) = $rpmcache{data};
+	my($ap) = $pkgcache{DATA};
 	return($ap);
 }
 
 sub extract_cve() {
 	my($self) = shift;
-	my(@arr) = shift;
+	my(@arr) = @_;
 
 	my(@res) = ();
 	foreach ( @arr ) {
 		next unless ( $_ );
 		if ( m/(CVE-\d\d\d\d-\d+)\D/ ) {
 			push(@res,$1);
-			print "CVE: $1\n";
 		}
 	}
 	return(@res);
@@ -278,20 +284,26 @@ sub extract_cve() {
 sub update_deb_cve_db() {
 	my($self) = shift;
 
-	my($ap) = $self->deb_pkg_db();
+	my($started) = $self->started();
+	my($ap) = $self->pkg_db();
 
 	# apt-get changelog openssh-server
-	my($cve_changelog_db) = $self->home() . "/.cve-changelog." . $self->hostname . ".db";
-	$self->debug(5,"cve_changelog_db: $cve_changelog_db");
+	my($cve_cve_db) = $self->cvedb();
+	$self->debug(5,"cve_cvedb: $cve_cve_db");
 
-	my(%cve) = $self->readhashcache($cve_changelog_db);
+	my(%cve) = $self->readhashcache($cve_cve_db);
 
 	my($pkg);
+	my($max) = 0;
 	foreach $pkg ( sort @$ap ) {
+		if ( $max-- == 1 ) {
+			print "Exiting, because you are debugging...\n";
+			exit(1);
+		}
 		my(@cve);
-		if ( defined($cve{$pkg}) ) {
+		if ( defined($cve{$pkg}{DATA}) ) {
 			$self->debug(9,"Using cache for $pkg");
-			my($ap) = $cve{$pkg};
+			my($ap) = $cve{$pkg}{DATA};
 			@cve = @$ap;
 		}
 		else {
@@ -307,22 +319,10 @@ sub update_deb_cve_db() {
 			}
 
 			@cve = $self->extract_cve(@arr);
-			if ( $#cve > 2 ) {
-				print Dumper(\@cve);
-				exit;
-			}
-			#$cve{$pkg} = \@cve;
-			#print "Saving $cve_changelog_db\n";
-			#lock_nstore(\%cve, $cve_changelog_db);
-		}
-
-		my($res) = undef;
-		foreach ( @cve ) {
-			next unless ( m/CVE/ );
-			$res .= "$_ ";
-		}
-		if ( $res ) {
-			print "$pkg: $res\n";
+			$cve{$pkg}{DATA} = \@cve;
+			$cve{$pkg}{TIME} = $started;
+			print "Saving $pkg to $cve_cve_db\n";
+			lock_store(\%cve, $cve_cve_db);
 		}
 	}
 }
@@ -330,72 +330,60 @@ sub update_deb_cve_db() {
 sub update_rpm_cve_db() {
 	my($self) = shift;
 
-	my($ap) = $self->rpm_pkg_db();
+	my($ap) = $self->pkg_db();
+	my($started) = $self->started();
 
-	my($cve_changelog_db) = $self->home() . "/.cve-changelog." . $self->hostname . ".db";
-	$self->debug(5,"cve_changelog_db: $cve_changelog_db");
-	my(%cve);
-	if ( -r $cve_changelog_db ) {
-		my($hashref);
-		$hashref = lock_retrieve($cve_changelog_db);
-		#print Dumper(\$hashref);
-		%cve = %$hashref;
-	}
+	my($cve_cve_db) = $self->cvedb();
+	$self->debug(5,"cve_cve_db: $cve_cve_db");
+	my(%cve) = $self->readhashcache($cve_cve_db);
 
 	my($pkg);
 	foreach $pkg ( sort @$ap ) {
 		my(@cve);
-		if ( defined($cve{$pkg}) ) {
-			#print "Using cache...\n";
-			my($ap) = $cve{$pkg};
+		if ( defined($cve{$pkg}{DATA}) ) {
+			$self->debug(9,"Using cache...");
+			my($ap) = $cve{$pkg}{DATA};
 			@cve = @$ap;
 		}
 		else {
 			my(@arr) = $self->rpm("-q --changelog $pkg");
-			foreach ( @arr ) {
-				if ( m/(CVE-\d\d\d\d-\d+)\D/ ) {
-					push(@cve,$1);
-					print "Cve: $1\n";
-				}
-			}
-			$cve{$pkg} = \@cve;
-			print "Saving $cve_changelog_db\n";
-			lock_nstore(\%cve, $cve_changelog_db);
+			@cve = $self->extract_cve(@arr);
+			$cve{$pkg}{DATA} = \@cve;
+			$cve{$pkg}{TIME} = $started;
+			print "Saving $pkg $cve_cve_db\n";
+			lock_store(\%cve, $cve_cve_db);
 		}
 
-		my($res) = undef;
-		foreach ( @cve ) {
-			next unless ( m/CVE/ );
-			$res .= "$_ ";
-		}
-		if ( $res ) {
-			print "$pkg: $res\n";
-		}
 	}
 }
 
+sub dump_cve_db() {
+	my($self) = shift;
+
+	my($cve_cve_db) = $self->cvedb();
+	my(%cve) = $self->readhashcache($cve_cve_db);
+	foreach ( sort keys %cve ) {
+		my($ap) = $cve{$_}{DATA};
+		my($time) = $cve{$_}{TIME};
+		my($str) = join(" ","$_ ($time): ", @$ap, "\n");
+		print $str;
+	}
+	#	my($res) = undef;
+	#	$res = join(" ",@cve) if ( $#cve >= 0 );
+	#	if ( $res ) {
+	#		print "$pkg: $res\n";
+	#	}
+}
+	
+		
 sub update_cve_db() {
 	my($self) = shift;
 	
-	my($do_deb) = 0;
-	my($do_rpm) = 0;
-	my($osrel) = "/etc/os-release";
-	if ( -r $osrel ) {
-		my(@osrel) = $self->readfile($osrel);
-		foreach ( @osrel ) {
-			if ( m/ubuntu|debian/i ) {
-				$do_deb=1;
-			}
-			elsif ( m/rhel|centos|redhat|suse/ ) {
-				$do_rpm=1;
-			}
-		}
-	}
-	if ( $do_deb ) {
+	if ( $self->isdeb() ) {
 		print "Using deb...\n";
 		$self->update_deb_cve_db();
 	}
-	elsif ( $do_rpm ) {
+	elsif ( $self->isrpm() ) {
 		print "Using rpm...\n";
 		$self->update_rpm_cve_db();
 	}
