@@ -1,7 +1,5 @@
 #!/usr/bin/perl -w
 
-#!/usr/bin/perl -w
-
 use strict;
 use Data::Dumper;
 use Getopt::Long;
@@ -9,7 +7,7 @@ use FindBin;
 use lib $FindBin::Bin;
 use Cve;
 
-my($debug) = 9;
+my($debug) = 0;
 
 GetOptions (
 	"debug=i"  => \$debug
@@ -17,8 +15,7 @@ GetOptions (
 
 my($cve) = new Cve( debug => $debug );
 
-#$cve->update_rpm_cve_db()
-$cve->update_deb_cve_db()
+$cve->update_cve_db()
 
 
 

@@ -149,6 +149,7 @@ sub rpm() {
 	my($rpm) = $self->rpmbin();
 	unless ( $rpm ) {
 		$self->debug(1,"Trying to find rpm...");
+		$rpm = "/bin/rpm" if ( -x "/bin/rpm" );
 		$rpm = "/usr/bin/rpm" if ( -x "/usr/bin/rpm" );
 		if ( $rpm ) {
 			$self->rpmbin($rpm);
@@ -176,6 +177,24 @@ sub readhashcache() {
 	return(%hashcache);
 }
 
+sub readfile() {
+	my($self) = shift;
+	my($file) = shift;
+	my(@res) = ();
+
+	if ( open(IN,"<$file") ) {
+		foreach ( <IN> ) {
+			next unless ( $_ );
+			chomp;
+			push(@res,$_);
+		}
+		close(IN);
+	}
+	else {
+		print "Reading $file: $!\n";
+	}
+	return(@res);
+}
 	
 sub _get_deb_pkg() {
 	my($self) = shift;
@@ -233,7 +252,7 @@ sub rpm_pkg_db() {
 		lock_store \%rpmcache, $cve_rpm_db;
 	}
 	else {
-		$self->debug("Using cache...age=$age");
+		$self->debug(1,"Using cache...age=$age");
 	}
 
 	my($ap) = $rpmcache{data};
@@ -354,3 +373,32 @@ sub update_rpm_cve_db() {
 		}
 	}
 }
+
+sub update_cve_db() {
+	my($self) = shift;
+	
+	my($do_deb) = 0;
+	my($do_rpm) = 0;
+	my($osrel) = "/etc/os-release";
+	if ( -r $osrel ) {
+		my(@osrel) = $self->readfile($osrel);
+		foreach ( @osrel ) {
+			if ( m/ubuntu|debian/i ) {
+				$do_deb=1;
+			}
+			elsif ( m/rhel|centos|redhat|suse/ ) {
+				$do_rpm=1;
+			}
+		}
+	}
+	if ( $do_deb ) {
+		print "Using deb...\n";
+		$self->update_deb_cve_db();
+	}
+	elsif ( $do_rpm ) {
+		print "Using rpm...\n";
+		$self->update_rpm_cve_db();
+	}
+}
+	
+1;
