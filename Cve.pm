@@ -56,7 +56,7 @@ use open ':encoding(utf8)';
 use Sys::Hostname;
 binmode(STDOUT, ":utf8");
 
-our $DEBUG = 1;
+our $DEBUG = 0;
 our $VERSION = 'v0.1.0';
 our @ISA = qw(Object);
 
@@ -72,7 +72,7 @@ sub new {
 		debug => $DEBUG,
 	);
         my(%hash) = ( %defaults, @_) ;
-	print Dumper(\%hash);
+	print Dumper(\%hash) if ( $DEBUG );
         while ( my($key,$val) = each(%hash) ) {
                 $self->set($key,$val);
         }
@@ -365,6 +365,8 @@ sub dump_cve_db() {
 	foreach ( sort keys %cve ) {
 		my($ap) = $cve{$_}{DATA};
 		my($time) = $cve{$_}{TIME};
+		my(@arr) = @$ap;
+		next if ( $#arr < 0 );
 		my($str) = join(" ","$_ ($time): ", @$ap, "\n");
 		print $str;
 	}
@@ -380,11 +382,11 @@ sub update_cve_db() {
 	my($self) = shift;
 	
 	if ( $self->isdeb() ) {
-		print "Using deb...\n";
+		$self->debug(2, "Using deb...");
 		$self->update_deb_cve_db();
 	}
 	elsif ( $self->isrpm() ) {
-		print "Using rpm...\n";
+		$self->debug(2, "Using rpm...");
 		$self->update_rpm_cve_db();
 	}
 }
