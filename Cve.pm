@@ -387,7 +387,9 @@ sub dump_cve_db() {
 	my($cve_cve_db) = $self->cvedb();
 	my(%cve) = $self->readhashcache($cve_cve_db);
 	my($pkg);
+	my($pkgs) = 0;
 	foreach $pkg ( sort keys %cve ) {
+		$pkgs++;
 		my($ap) = $cve{$pkg}{DATA};
 		my($time) = $cve{$pkg}{TIME};
 		my(@arr) = @$ap;
@@ -418,6 +420,9 @@ sub dump_cve_db() {
 			print "$pkg ($time) $rec/$recs: $_\n";
 		}
 					
+	}
+	unless ( $pkgs ) {
+		print "No records in CVE db ($cve_cve_db), maybe do an update first...\n";
 	}
 }
 	
