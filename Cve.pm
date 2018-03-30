@@ -96,6 +96,9 @@ sub new {
 		elsif ( -r "/etc/redhat-release" ) {
 			$self->isrpm(1);
 		}
+		else {
+			die "Cant find out if this is a deb or rpm based system, exiting...\n";
+		}
 	}
 
 	my($cve_pkg_db) = $self->home() . "/.cve-pkg." . $self->hostname . ".db";
@@ -118,7 +121,9 @@ sub debug() {
 		return  unless ( $debug >= $level );
 	}
 	chomp($str);
-	print "DEBUG($level): " . localtime(time) . " $str ***\n";
+	my($p1,$f1,$line) = caller(0);
+	my($p2, $f2, $l2, $subroutine) = caller(1);
+	print "DEBUG($level) $subroutine/$line: " . localtime(time) . " $str ***\n";
 }
 
 sub _accessor {
@@ -130,7 +135,9 @@ sub _accessor {
 		return ($self->set($key,$value));
 	}
 	else {
-		return ($self->get($key));
+		my($value) = $self->get($key);
+		$self->debug(9,"Returning $key value $value");
+		return ($value);
 	}
 }
 	
@@ -182,6 +189,7 @@ sub rpm() {
 		$rpm = "/bin/rpm" if ( -x "/bin/rpm" );
 		$rpm = "/usr/bin/rpm" if ( -x "/usr/bin/rpm" );
 		if ( $rpm ) {
+			$self->debug(5,"Using $rpm as rpm");
 			$self->rpmbin($rpm);
 		}
 		else {
@@ -200,6 +208,7 @@ sub readhashcache() {
 
 	my(%hashcache) = ();
 	if ( -r $file ) {
+		$self->debug(5,"Reading $file into a hashref");
 		my($hashref);
 		$hashref = lock_retrieve($file);
 		%hashcache = %$hashref;
@@ -213,6 +222,7 @@ sub readfile() {
 	my(@res) = ();
 
 	if ( open(IN,"<$file") ) {
+		$self->debug(5,"Reading $file into an array");
 		foreach ( <IN> ) {
 			next unless ( $_ );
 			chomp;
@@ -229,11 +239,13 @@ sub readfile() {
 sub _get_deb_pkg() {
 	my($self) = shift;
 	my($cmd) = "dpkg-query -W -f \'\${Package} \${Version}\\n\'";
+	$self->debug(9,"Retreiving deb pkg list");
 	return( $self->popen($cmd) );
 }
 
 sub _get_rpm_pkg() {
 	my($self) = shift;
+	$self->debug(9,"Retreiving rpm pkg list");
 	return( $self->rpm("-qa") ) ;
 }
 
@@ -274,6 +286,7 @@ sub extract_cve() {
 	my(@arr) = @_;
 
 	my(@res) = ();
+	$self->debug(9,"Extracting CVE from input");
 	foreach ( @arr ) {
 		next unless ( $_ );
 		if ( m/(CVE-\d\d\d\d-\d+)\D/ ) {
@@ -298,6 +311,7 @@ sub update_deb_cve_db() {
 
 	my($pkg);
 	my($max) = 0;
+	my($refresh) = 0;
 	foreach $pkg ( sort @$ap ) {
 		if ( $max-- == 1 ) {
 			print "Exiting, because you are debugging...\n";
@@ -310,6 +324,7 @@ sub update_deb_cve_db() {
 			@cve = @$ap;
 		}
 		else {
+			$self->debug(9,"Refreshing $pkg CVE cache");
 			my(@arr) = ();
 			my($pkg_name,$pkg_version) = split(/\s+/,$pkg);
 			$self->debug(9,"pkg_name=$pkg_name");
@@ -324,9 +339,12 @@ sub update_deb_cve_db() {
 			@cve = $self->extract_cve(@arr);
 			$cve{$pkg}{DATA} = \@cve;
 			$cve{$pkg}{TIME} = $started;
-			print "Saving $pkg to $cve_cve_db\n";
-			lock_store(\%cve, $cve_cve_db);
+			$refresh++;
 		}
+	}
+	if ( $refresh ) {
+		print "Saving $pkg to $cve_cve_db\n";
+		lock_store(\%cve, $cve_cve_db);
 	}
 }
 
@@ -340,6 +358,7 @@ sub update_rpm_cve_db() {
 	$self->debug(5,"cve_cve_db: $cve_cve_db");
 	my(%cve) = $self->readhashcache($cve_cve_db);
 
+	my($refresh) = 0;
 	my($pkg);
 	foreach $pkg ( sort @$ap ) {
 		my(@cve);
@@ -349,14 +368,18 @@ sub update_rpm_cve_db() {
 			@cve = @$ap;
 		}
 		else {
+			$self->debug(9,"Refreshing $pkg CVE cache...");
 			my(@arr) = $self->rpm("-q --changelog $pkg");
 			@cve = $self->extract_cve(@arr);
 			$cve{$pkg}{DATA} = \@cve;
 			$cve{$pkg}{TIME} = $started;
-			print "Saving $pkg $cve_cve_db\n";
-			lock_store(\%cve, $cve_cve_db);
+			$refresh++;
 		}
 
+	}
+	if ( $refresh ) {
+		print "Saving $pkg $cve_cve_db\n";
+		lock_store(\%cve, $cve_cve_db);
 	}
 }
 
@@ -365,19 +388,39 @@ sub dump_cve_db() {
 
 	my($cve_cve_db) = $self->cvedb();
 	my(%cve) = $self->readhashcache($cve_cve_db);
-	foreach ( sort keys %cve ) {
-		my($ap) = $cve{$_}{DATA};
-		my($time) = $cve{$_}{TIME};
+	my($pkg);
+	foreach $pkg ( sort keys %cve ) {
+		my($ap) = $cve{$pkg}{DATA};
+		my($time) = $cve{$pkg}{TIME};
 		my(@arr) = @$ap;
-		next if ( $#arr < 0 );
-		my($str) = join(" ","$_ ($time): ", @$ap, "\n");
-		print $str;
+
+		#
+		# Split in to ~1000 characters / line
+		#
+		my(@res) = ();
+		my($rec) = 0;
+		my($len) = 0;
+		foreach ( @arr ) {
+			if ( $len > 1000 ) {
+				$rec++;
+				$len=0;
+			}
+			my($str) = "$_ ";
+			$res[$rec] .= $str;
+			$len += length($str);
+		}
+				
+		#
+		# Print all record 
+		#
+		$rec = 0;
+		my($recs) = $#res + 1;
+		foreach ( @res ) {
+			$rec++;
+			print "$pkg ($time) $rec/$recs: $_\n";
+		}
+					
 	}
-	#	my($res) = undef;
-	#	$res = join(" ",@cve) if ( $#cve >= 0 );
-	#	if ( $res ) {
-	#		print "$pkg: $res\n";
-	#	}
 }
 	
 		
