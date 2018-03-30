@@ -327,7 +327,7 @@ sub update_deb_cve_db() {
 			my($pkg_name,$pkg_version) = split(/\s+/,$pkg);
 			$self->debug(9,"pkg_name=$pkg_name");
 			$self->debug(9,"pkg_version=$pkg_version");
-			my($changelog) = "/usr/share/doc/$pkg_name/changelog.Debian.gzXX";
+			my($changelog) = "/usr/share/doc/$pkg_name/changelog.Debian.gz";
 			if ( -r $changelog ) {
 				$self->debug(5,"Using changelog file $changelog");
 				my($cmd) = "gunzip -c $changelog";
