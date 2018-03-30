@@ -3,7 +3,7 @@ package Object;
 use strict;
 use Carp;
 
-our $VERSION = 'v0.0.1';
+our $VERSION = 'v0.1.0';
 
 sub set($$$) {
         my($self) = shift;
