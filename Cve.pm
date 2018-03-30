@@ -134,7 +134,7 @@ sub _accessor {
 	else {
 		my($value) = $self->get($key);
 		my($str) = $value || "undef";
-		$self->debug(9,"Returning $key value $value");
+		$self->debug(9,"Returning $key value $str");
 		return ($value);
 	}
 }
