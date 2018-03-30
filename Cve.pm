@@ -53,6 +53,13 @@ use POSIX;
 use utf8;
 use open ':encoding(utf8)';
 use Sys::Hostname;
+
+my $dumper = eval {
+	require Data::Dumper;
+	Data::Dumper->import();
+	1;
+};
+
 binmode(STDOUT, ":utf8");
 
 our $DEBUG = 0;
@@ -101,12 +108,23 @@ sub new {
 		}
 	}
 
+	$self->id($ID);
 	my($cve_pkg_db) = $self->home() . "/.cve-pkg." . $self->hostname . ".db";
 	$self->pkgdb($cve_pkg_db);
 	my($cve_changelog_db) = $self->home() . "/.cve-cve." . $self->hostname . ".db";
 	$self->cvedb($cve_changelog_db);
 
+	$self->dumper($self) if ( $self->debuglvl() );
         return($self);
+}
+
+sub dumper() {
+	my($self) = shift;
+	my($var) = shift;
+	
+	if ( $dumper ) {
+		print Dumper(\$var);
+	}
 }
 
 sub debug() {
@@ -150,6 +168,8 @@ sub isdeb { return ( shift->_accessor("isdeb",shift) ); }
 sub started { return ( shift->_accessor("started",shift) ); }
 sub pkgdb { return ( shift->_accessor("pkgdb",shift) ); }
 sub cvedb { return ( shift->_accessor("cvedb",shift) ); }
+sub id { return ( shift->_accessor("id",shift) ); }
+sub debuglvl { return ( shift->_accessor("debug",shift) ); }
 
 sub trim {
 	my($self) = shift;
