@@ -59,6 +59,8 @@ our $DEBUG = 0;
 our $VERSION = 'v0.1.0';
 our @ISA = qw(Object);
 
+our $ID = '$Id$';
+
 sub new {
         my $proto = shift;
         my $class = ref($proto) || $proto;
