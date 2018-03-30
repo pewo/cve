@@ -327,10 +327,15 @@ sub update_deb_cve_db() {
 			my($pkg_name,$pkg_version) = split(/\s+/,$pkg);
 			$self->debug(9,"pkg_name=$pkg_name");
 			$self->debug(9,"pkg_version=$pkg_version");
-			my($changelog) = "/usr/share/doc/$pkg_name/changelog.Debian.gz";
+			my($changelog) = "/usr/share/doc/$pkg_name/changelog.Debian.gzXX";
 			if ( -r $changelog ) {
 				$self->debug(5,"Using changelog file $changelog");
 				my($cmd) = "gunzip -c $changelog";
+				@arr = $self->popen($cmd);
+			}
+			else {
+				my($cmd) = "apt-get changelog $pkg_name";
+				$self->debug(5,"Using apt-get to get changelog");
 				@arr = $self->popen($cmd);
 			}
 
@@ -341,7 +346,7 @@ sub update_deb_cve_db() {
 		}
 	}
 	if ( $refresh ) {
-		print "Saving $pkg to $cve_cve_db\n";
+		print "Refreshing CVE db $cve_cve_db\n";
 		lock_store(\%cve, $cve_cve_db);
 	}
 }
@@ -437,6 +442,41 @@ sub update_cve_db() {
 	elsif ( $self->isrpm() ) {
 		$self->debug(2, "Using rpm...");
 		$self->update_rpm_cve_db();
+	}
+}
+
+sub search_cve_db() {
+	my($self) = shift;
+	my($search) = shift;
+	
+	return() unless ( defined($search) );
+	return() unless ( $search );
+
+	my($ap) = $self->pkg_db();
+
+	my($cve_cve_db) = $self->cvedb();
+	$self->debug(5,"cve_cve_db: $cve_cve_db");
+	my(%cve) = $self->readhashcache($cve_cve_db);
+
+	my($pkg);
+	my(%res);
+	foreach $pkg ( @$ap ) {
+		my($cveap) = $cve{$pkg}{DATA};
+		my($foundcve) = 0;
+		foreach ( @$cveap ) {
+			if ( $_ =~ /$search/i ) {
+				$foundcve++;
+				$res{$pkg} .= $_ . " ";
+			}
+		}
+		unless ( $foundcve ) {
+			if ( $pkg =~ /$search/i ) {
+				$res{$pkg}=join(" ",@$cveap);
+			}
+		}
+	}
+	foreach $pkg ( sort keys %res ) {
+		print "$pkg: $res{$pkg}\n";
 	}
 }
 	
