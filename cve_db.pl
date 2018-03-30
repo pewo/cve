@@ -6,6 +6,8 @@ use FindBin;
 use lib $FindBin::Bin;
 use Cve;
 
+my($ID) = '$Id';
+
 my($debug) = 0;
 my($update) = undef;
 my($dump) = undef;
