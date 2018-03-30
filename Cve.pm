@@ -376,7 +376,7 @@ sub update_rpm_cve_db() {
 
 	}
 	if ( $refresh ) {
-		print "Saving $pkg $cve_cve_db\n";
+		print "Refreshing CVE db $cve_cve_db\n";
 		lock_store(\%cve, $cve_cve_db);
 	}
 }
