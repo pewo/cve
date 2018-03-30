@@ -48,7 +48,6 @@ package Cve;
 
 use strict;
 use Carp;
-use Data::Dumper;
 use Storable qw(lock_store lock_retrieve);
 use POSIX;
 use utf8;
@@ -72,7 +71,6 @@ sub new {
 		debug => $DEBUG,
 	);
         my(%hash) = ( %defaults, @_) ;
-	print Dumper(\%hash) if ( $DEBUG );
         while ( my($key,$val) = each(%hash) ) {
                 $self->set($key,$val);
         }
@@ -106,7 +104,6 @@ sub new {
 	my($cve_changelog_db) = $self->home() . "/.cve-cve." . $self->hostname . ".db";
 	$self->cvedb($cve_changelog_db);
 
-	print Dumper(\$self) if ( $DEBUG );
         return($self);
 }
 
@@ -136,6 +133,7 @@ sub _accessor {
 	}
 	else {
 		my($value) = $self->get($key);
+		my($str) = $value || "undef";
 		$self->debug(9,"Returning $key value $value");
 		return ($value);
 	}

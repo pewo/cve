@@ -1,7 +1,6 @@
 #!/usr/bin/perl -w
 
 use strict;
-use Data::Dumper;
 use Getopt::Long;
 use FindBin;
 use lib $FindBin::Bin;
