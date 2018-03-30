@@ -93,6 +93,9 @@ sub new {
 				}
 			}
 		}
+		elsif ( -r "/etc/redhat-release" ) {
+			$self->isrpm(1);
+		}
 	}
 
 	my($cve_pkg_db) = $self->home() . "/.cve-pkg." . $self->hostname . ".db";
