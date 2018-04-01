@@ -178,6 +178,7 @@ sub cvedb { return ( shift->_accessor("cvedb",shift) ); }
 sub id { return ( shift->_accessor("id",shift) ); }
 sub debuglvl { return ( shift->_accessor("debug",shift) ); }
 sub dbdir { return ( shift->_accessor("dbdir",shift) ); }
+sub force { return ( shift->_accessor("force",shift) ); }
 
 sub trim {
 	my($self) = shift;
@@ -279,6 +280,7 @@ sub _get_rpm_pkg() {
 
 sub pkg_db() {
 	my($self) = shift;
+	my(%args) = @_;
 	my($cve_pkg_db) = $self->pkgdb();
 	$self->debug(5,"cve_pkg_db: $cve_pkg_db");
 
@@ -287,8 +289,9 @@ sub pkg_db() {
 	my(%pkgcache) = $self->readhashcache($cve_pkg_db);
 
 	my($secs) = $pkgcache{TIME} || 0;
+	
 	my($age) = time - $secs;
-	if ( $age > 1600 ) {
+	if ( $age > 1600 || $args{force} ) {
 		$self->debug(0,"Refreshing pkg db");
 		$self->debug(1,"Refreshing cache, age: $age");
 		my(@pkg) = ();
@@ -328,9 +331,10 @@ sub extract_cve() {
 	
 sub update_cve_db() {
 	my($self) = shift;
+	my(%args) = @_;
 
 	my($started) = $self->started();
-	my($ap) = $self->pkg_db();
+	my($ap) = $self->pkg_db( force => $args{force} );
 	my(@pkg) = @$ap;
 
 	# apt-get changelog openssh-server
@@ -343,7 +347,7 @@ sub update_cve_db() {
 	my($max) = 0;
 	my($refresh) = 0;
 	my($pkgs) = $#pkg + 1;
-	my($index) = 1;
+	my($index) = 0;
 	foreach $pkg ( sort @pkg ) {
 		$index++;
 		if ( $max-- == 1 ) {

@@ -2,6 +2,7 @@
 
 use strict;
 use Getopt::Long;
+use Pod::Usage;
 use FindBin;
 use lib $FindBin::Bin;
 
@@ -26,20 +27,30 @@ my($search) = undef;
 my($help) = undef;
 my($dbdir) = undef;
 my($latest) = undef;
+my($force) = undef;
 
 sub help() {
-	print "Usage $0 --dbdir=<db dir> -d|--dump (dump CVE db) --latest (only latest updates)  -u|--update (updte CVE db) -s|--search=text (search for CVE) --debug=1-9 (debug level)\n";
+	print "$0 arguments\n";
+	print "  --dbdir=<db dir>  Where outputfiles are stored\n";
+	print "  --debug=<level> Set debug level\n";
+	print "  --dump  Dump the CVE database\n";
+	print "  --force  force update on pkg db (ignoring cache)\n";
+	print "  --help This output\n";
+	print "  --latest  Used togehter with dump to onbly dump tha latest updates\n";
+	print "  --search=text Search the CVE db\n";
+	print "  --update Update the CVE db\n";
 	return(0);
 }
 
 GetOptions (
-	"h|help"  => \$help,
+	"dbdir=s" => \$dbdir,
 	"debug=i"  => \$debug,
 	"d|dump"  => \$dump,
-	"u|update" => \$update,
-	"s|search=s" => \$search,
-	"dbdir=s" => \$dbdir,
+	"force"  => \$force,
+	"h|help"  => \$help,
 	"latest" => \$latest,
+	"s|search=s" => \$search,
+	"u|update" => \$update,
 ) or die("Error in command line arguments\n");
 
 foreach ( @ARGV ) {
@@ -59,7 +70,7 @@ my($done) = 0;
 
 if ( $update ) {
 	$done++;
-	$cve->update_cve_db();
+	$cve->update_cve_db( force => $force );
 }
 
 if ( $dump ) {
@@ -75,3 +86,4 @@ if ( $search ) {
 unless ( $done ) {
 	exit(help());
 }
+
