@@ -326,7 +326,7 @@ sub extract_cve() {
 }
 
 	
-sub update_deb_cve_db() {
+sub update_cve_db() {
 	my($self) = shift;
 
 	my($started) = $self->started();
@@ -361,19 +361,24 @@ sub update_deb_cve_db() {
 			$self->debug(0,"Checking $index/$pkgs $pkg");
 			$self->debug(9,"Refreshing $pkg CVE cache");
 			my(@arr) = ();
-			my($pkg_name,$pkg_version) = split(/\s+/,$pkg);
-			$self->debug(9,"pkg_name=$pkg_name");
-			$self->debug(9,"pkg_version=$pkg_version");
-			my($changelog) = "/usr/share/doc/$pkg_name/changelog.Debian.gz";
-			if ( -r $changelog ) {
-				$self->debug(5,"Using changelog file $changelog");
-				my($cmd) = "gunzip -c $changelog";
-				@arr = $self->popen($cmd);
+			if ( $self->isdeb() ) {
+				my($pkg_name,$pkg_version) = split(/\s+/,$pkg);
+				$self->debug(9,"pkg_name=$pkg_name");
+				$self->debug(9,"pkg_version=$pkg_version");
+				my($changelog) = "/usr/share/doc/$pkg_name/changelog.Debian.gz";
+				if ( -r $changelog ) {
+					$self->debug(5,"Using changelog file $changelog");
+					my($cmd) = "gunzip -c $changelog";
+					@arr = $self->popen($cmd);
+				}
+				else {
+					my($cmd) = "apt-get changelog $pkg_name";
+					$self->debug(5,"Using apt-get to get changelog");
+					@arr = $self->popen($cmd);
+				}
 			}
-			else {
-				my($cmd) = "apt-get changelog $pkg_name";
-				$self->debug(5,"Using apt-get to get changelog");
-				@arr = $self->popen($cmd);
+			elsif ( $self->isrpm() ) {
+				@arr = $self->rpm("-q --changelog $pkg");
 			}
 
 			@cve = $self->extract_cve(@arr);
@@ -381,43 +386,6 @@ sub update_deb_cve_db() {
 			$cve{$pkg}{TIME} = $started;
 			$refresh++;
 		}
-	}
-	if ( $refresh ) {
-		print "Refreshing CVE db $cve_cve_db\n";
-		lock_store(\%cve, $cve_cve_db);
-	}
-}
-
-sub update_rpm_cve_db() {
-	my($self) = shift;
-
-	my($ap) = $self->pkg_db();
-	my($started) = $self->started();
-
-	my($cve_cve_db) = $self->cvedb();
-	$self->debug(5,"cve_cve_db: $cve_cve_db");
-	my(%cve) = $self->readhashcache($cve_cve_db);
-
-	my($refresh) = 0;
-	my($pkg);
-	foreach $pkg ( sort @$ap ) {
-		my(@cve);
-		if ( defined($cve{$pkg}{DATA}) ) {
-			$self->debug(9,"Using cache...");
-			my($ap) = $cve{$pkg}{DATA};
-			@cve = @$ap;
-			$self->debug(0,"Checking $pkg (cached)");
-		}
-		else {
-			$self->debug(0,"Checking $pkg");
-			$self->debug(9,"Refreshing $pkg CVE cache...");
-			my(@arr) = $self->rpm("-q --changelog $pkg");
-			@cve = $self->extract_cve(@arr);
-			$cve{$pkg}{DATA} = \@cve;
-			$cve{$pkg}{TIME} = $started;
-			$refresh++;
-		}
-
 	}
 	if ( $refresh ) {
 		print "Refreshing CVE db $cve_cve_db\n";
@@ -470,20 +438,6 @@ sub dump_cve_db() {
 	}
 }
 	
-		
-sub update_cve_db() {
-	my($self) = shift;
-	
-	if ( $self->isdeb() ) {
-		$self->debug(2, "Using deb...");
-		$self->update_deb_cve_db();
-	}
-	elsif ( $self->isrpm() ) {
-		$self->debug(2, "Using rpm...");
-		$self->update_rpm_cve_db();
-	}
-}
-
 sub search_cve_db() {
 	my($self) = shift;
 	my($search) = shift;
