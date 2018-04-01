@@ -25,9 +25,10 @@ my($dump) = undef;
 my($search) = undef;
 my($help) = undef;
 my($dbdir) = undef;
+my($latest) = undef;
 
 sub help() {
-	print "Usage $0 --dbdir=<db dir> -d|--dump (dump CVE db) -u|--update (updte CVE db) -s|--search=text (search for CVE) --debug=1-9 (debug level)\n";
+	print "Usage $0 --dbdir=<db dir> -d|--dump (dump CVE db) --latest (only latest updates)  -u|--update (updte CVE db) -s|--search=text (search for CVE) --debug=1-9 (debug level)\n";
 	return(0);
 }
 
@@ -38,6 +39,7 @@ GetOptions (
 	"u|update" => \$update,
 	"s|search=s" => \$search,
 	"dbdir=s" => \$dbdir,
+	"latest" => \$latest,
 ) or die("Error in command line arguments\n");
 
 foreach ( @ARGV ) {
@@ -62,7 +64,7 @@ if ( $update ) {
 
 if ( $dump ) {
 	$done++;
-	$cve->dump_cve_db();
+	$cve->dump_cve_db( latest => $latest );
 }
 
 if ( $search ) {

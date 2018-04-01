@@ -395,11 +395,28 @@ sub update_cve_db() {
 
 sub dump_cve_db() {
 	my($self) = shift;
+	my(%args) = @_;
 
 	my($cve_cve_db) = $self->cvedb();
 	my(%cve) = $self->readhashcache($cve_cve_db);
 	my($pkg);
 	my($pkgs) = 0;
+	if ( $args{latest} ) {
+		my($latest) = 0;
+		my(%allcve) = %cve;
+		%cve = ();
+		foreach $pkg ( sort keys %allcve ) {
+			if ( $latest < $allcve{$pkg}{TIME} ) {
+				$latest = $allcve{$pkg}{TIME};
+				$self->debug(5,"Latest = $latest, " . localtime($latest));
+			}
+		}
+		foreach $pkg ( sort keys %allcve ) {
+			next unless ( $allcve{$pkg}{TIME} == $latest );
+			$cve{$pkg}=$allcve{$pkg};
+		}
+	}
+		
 	foreach $pkg ( sort keys %cve ) {
 		$pkgs++;
 		my($ap) = $cve{$pkg}{DATA};
