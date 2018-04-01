@@ -137,15 +137,18 @@ sub debug() {
 	my($level) = shift;
 	my($str) = shift;
 	
+	chomp($str) if ( $str );
 	my($debug) = $self->get("debug");
 	if ( $level > 0 ) {
 		return  unless ( $debug );
 		return  unless ( $debug >= $level );
+		my($p1,$f1,$line) = caller(0);
+		my($p2, $f2, $l2, $subroutine) = caller(1);
+		print "DEBUG($level) $subroutine/$line: " . localtime(time) . " $str ***\n";
 	}
-	chomp($str);
-	my($p1,$f1,$line) = caller(0);
-	my($p2, $f2, $l2, $subroutine) = caller(1);
-	print "DEBUG($level) $subroutine/$line: " . localtime(time) . " $str ***\n";
+	else {
+		print "$str\n";
+	}
 }
 
 sub _accessor {
@@ -286,6 +289,7 @@ sub pkg_db() {
 	my($secs) = $pkgcache{TIME} || 0;
 	my($age) = time - $secs;
 	if ( $age > 1600 ) {
+		$self->debug(0,"Refreshing pkg db");
 		$self->debug(1,"Refreshing cache, age: $age");
 		my(@pkg) = ();
 		if ( $self->isrpm() ) {
@@ -299,7 +303,7 @@ sub pkg_db() {
 		lock_store \%pkgcache, $cve_pkg_db;
 	}
 	else {
-		$self->debug(1,"Using cache...age=$age");
+		$self->debug(0,"Using pkg db cache");
 	}
 
 	my($ap) = $pkgcache{DATA};
@@ -327,6 +331,7 @@ sub update_deb_cve_db() {
 
 	my($started) = $self->started();
 	my($ap) = $self->pkg_db();
+	my(@pkg) = @$ap;
 
 	# apt-get changelog openssh-server
 	my($cve_cve_db) = $self->cvedb();
@@ -337,7 +342,10 @@ sub update_deb_cve_db() {
 	my($pkg);
 	my($max) = 0;
 	my($refresh) = 0;
-	foreach $pkg ( sort @$ap ) {
+	my($pkgs) = $#pkg + 1;
+	my($index) = 1;
+	foreach $pkg ( sort @pkg ) {
+		$index++;
 		if ( $max-- == 1 ) {
 			print "Exiting, because you are debugging...\n";
 			exit(1);
@@ -347,8 +355,10 @@ sub update_deb_cve_db() {
 			$self->debug(9,"Using cache for $pkg");
 			my($ap) = $cve{$pkg}{DATA};
 			@cve = @$ap;
+			$self->debug(0,"Checking $index/$pkgs $pkg (cached)");
 		}
 		else {
+			$self->debug(0,"Checking $index/$pkgs $pkg");
 			$self->debug(9,"Refreshing $pkg CVE cache");
 			my(@arr) = ();
 			my($pkg_name,$pkg_version) = split(/\s+/,$pkg);
@@ -396,8 +406,10 @@ sub update_rpm_cve_db() {
 			$self->debug(9,"Using cache...");
 			my($ap) = $cve{$pkg}{DATA};
 			@cve = @$ap;
+			$self->debug(0,"Checking $pkg (cached)");
 		}
 		else {
+			$self->debug(0,"Checking $pkg");
 			$self->debug(9,"Refreshing $pkg CVE cache...");
 			my(@arr) = $self->rpm("-q --changelog $pkg");
 			@cve = $self->extract_cve(@arr);
