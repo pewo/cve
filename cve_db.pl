@@ -4,7 +4,18 @@ use strict;
 use Getopt::Long;
 use FindBin;
 use lib $FindBin::Bin;
-use Cve;
+
+eval {
+	require Cve;
+	1;
+};
+
+if ( $@ ) {
+	print "Unable to load Cve module\n";
+	print "On some system you need to install perl-open\n\n";
+	print $@ . "\n";
+	exit(1);
+}
 
 my($ID) = '$Id$';
 
@@ -13,9 +24,10 @@ my($update) = undef;
 my($dump) = undef;
 my($search) = undef;
 my($help) = undef;
+my($dbdir) = undef;
 
 sub help() {
-	print "Usage $0 -d|--dump (dump CVE db) -u|--update (updte CVE db) -s|--search=text (search for CVE) --debug=1-9 (debug level)\n";
+	print "Usage $0 --dbdir=<db dir> -d|--dump (dump CVE db) -u|--update (updte CVE db) -s|--search=text (search for CVE) --debug=1-9 (debug level)\n";
 	return(0);
 }
 
@@ -25,6 +37,7 @@ GetOptions (
 	"d|dump"  => \$dump,
 	"u|update" => \$update,
 	"s|search=s" => \$search,
+	"dbdir=s" => \$dbdir,
 ) or die("Error in command line arguments\n");
 
 foreach ( @ARGV ) {
@@ -38,7 +51,7 @@ if ( $help ) {
 	exit(help());
 }
 
-my($cve) = new Cve( debug => $debug );
+my($cve) = new Cve( debug => $debug, dbdir => $dbdir );
 
 my($done) = 0;
 

@@ -76,13 +76,18 @@ sub new {
 
 	my(%defaults) = ( 
 		myhostname => hostname,
-		home => "$ENV{HOME}",
 		debug => $DEBUG,
 	);
+
         my(%hash) = ( %defaults, @_) ;
         while ( my($key,$val) = each(%hash) ) {
-                $self->set($key,$val);
+		if ( defined($val) ) {
+                	$self->set($key,$val);
+		}
         }
+	unless ( $self->dbdir() ) {
+		$self->dbdir($ENV{HOME});
+	}
 	$self->started(time);
 
 	{
@@ -109,9 +114,9 @@ sub new {
 	}
 
 	$self->id($ID);
-	my($cve_pkg_db) = $self->home() . "/.cve-pkg." . $self->hostname . ".db";
+	my($cve_pkg_db) = $self->dbdir() . "/.cve-pkg." . $self->hostname . ".db";
 	$self->pkgdb($cve_pkg_db);
-	my($cve_changelog_db) = $self->home() . "/.cve-cve." . $self->hostname . ".db";
+	my($cve_changelog_db) = $self->dbdir() . "/.cve-cve." . $self->hostname . ".db";
 	$self->cvedb($cve_changelog_db);
 
 	$self->dumper($self) if ( $self->debuglvl() );
@@ -161,7 +166,6 @@ sub _accessor {
 	
 
 sub rpmbin { return ( shift->_accessor("rpmbin",shift) ); }
-sub home { return ( shift->_accessor("home",shift) ); }
 sub myhostname { return ( shift->_accessor("myhostname",shift) ); }
 sub isrpm { return ( shift->_accessor("isrpm",shift) ); }
 sub isdeb { return ( shift->_accessor("isdeb",shift) ); }
@@ -170,6 +174,7 @@ sub pkgdb { return ( shift->_accessor("pkgdb",shift) ); }
 sub cvedb { return ( shift->_accessor("cvedb",shift) ); }
 sub id { return ( shift->_accessor("id",shift) ); }
 sub debuglvl { return ( shift->_accessor("debug",shift) ); }
+sub dbdir { return ( shift->_accessor("dbdir",shift) ); }
 
 sub trim {
 	my($self) = shift;
