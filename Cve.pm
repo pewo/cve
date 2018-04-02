@@ -1,5 +1,8 @@
 package Object;
 
+#
+# My old baseclasee for objetcs...
+#
 use strict;
 use Carp;
 
